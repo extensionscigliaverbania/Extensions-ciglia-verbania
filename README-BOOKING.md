@@ -19,7 +19,7 @@ Tutti i trattamenti hanno durata di 120 minuti.
 - Refill volume: 60 €.
 
 ## Modulo di prenotazione sul sito
-Il modulo raccoglie nome, nickname Instagram, trattamento, data/orario e note facoltative. L'email non viene richiesta. Le richieste sono registrate come `pending` e attendono conferma della titolare. Non viene inviato alcun DM Instagram automatico.
+Il modulo raccoglie nome, nickname Instagram, trattamento, data/orario e note facoltative. L'email non viene richiesta. Ogni prenotazione viene confermata automaticamente solo dopo che il sito ha creato l'evento in Google Calendar. Se Google Calendar non risponde correttamente, il sito mostra un errore e non lascia la prenotazione come confermata. Non viene inviato alcun DM Instagram automatico.
 
 ## Dove consultare le prenotazioni
 Le richieste sono archiviate in `public.appointments` nel progetto Supabase:
@@ -57,11 +57,11 @@ Il bridge è versionato in `google-apps-script/Code.gs`. Per attivarlo:
    - `GOOGLE_APPS_SCRIPT_TOKEN` = lo stesso token impostato in Script Properties.
 6. Dopo aver salvato i secret, inviare una nuova prenotazione di prova dal sito. Deve apparire nel calendario dedicato con titolo `IN ATTESA`. Quando la titolare la conferma, lo stesso evento viene aggiornato a `CONFERMATO`; se la annulla, l'evento viene eliminato.
 
-Il bridge effettua upsert usando l'ID prenotazione, quindi conferme e aggiornamenti modificano l'evento esistente invece di crearne uno duplicato. Le richieste pending sono visibili in calendario ma non equivalgono a prenotazioni confermate.
+Il bridge effettua upsert usando l'ID prenotazione, quindi conferme e aggiornamenti modificano l'evento esistente invece di crearne uno duplicato. Le prenotazioni dal sito vengono create come confermate solo quando la sincronizzazione con Google Calendar riesce. La stessa prenotazione viene aggiornata in caso di modifica e cancellata dal calendario in caso di annullamento.
 
 **Importante:** la parte server-side della Edge Function contiene già la chiamata al bridge, ma la sincronizzazione resta inattiva finché i due secret non sono configurati. Non inserire mai il token in GitHub o nel codice del sito. Se si cambia il codice Apps Script dopo la prima distribuzione, creare una nuova versione della distribuzione Web App.
 
 ## Cronologia e manutenzione
-- Le richieste pubbliche restano `pending` fino alla conferma della titolare.
+- Le prenotazioni pubbliche diventano `confirmed` solo dopo la risposta positiva di Google Calendar.
 - Nessun DM Instagram automatico.
 - Il sorgente della Edge Function deve restare versionato in `supabase/functions/booking-api/index.ts`. Prima di ogni deploy, confrontarlo con la versione attiva su Supabase e riallineare il repository dopo il deploy.
