@@ -124,7 +124,7 @@ Deno.serve(async (req: Request) => {
       const { data: inserted, error } = await db.from("appointments").insert({
         service_id:serviceId,customer_name:name,customer_instagram:instagram,
         customer_notes:String(body.notes ?? "").slice(0,1000),
-        starts_at:chosen.starts_at,ends_at:chosen.ends_at,status:"confirmed",source:"website"
+        starts_at:chosen.starts_at,ends_at:chosen.ends_at,status:"pending",source:"website"
       }).select("id,status,starts_at,ends_at").single();
       if (error) return json({error:error.code==="23P01"?"Questo orario è appena stato prenotato. Scegline un altro.":"Impossibile salvare la richiesta."},409,headers);
       let calendarSync: { ok: boolean; configured?: boolean; error?: string } = { ok: false, configured: false };
@@ -151,8 +151,16 @@ Deno.serve(async (req: Request) => {
         console.error("Google Calendar create sync failed", e);
       }
       await notifyCalendar();
-      if (!calendarSync.ok) { await db.from("appointments").update({ status: "pending", updated_at: new Date().toISOString() }).eq("id", inserted.id); return json({error:"Non è stato possibile confermare l’appuntamento sul calendario. Riprova tra poco."},502,headers); }
-      return json({appointment:inserted,message:"Prenotazione confermata.",calendar_sync:calendarSync},201,headers);
+      if (!calendarSync.ok) { await db.from("appointments").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", inserted.id); await notifyCalendar(); return json({error:"Non è stato possibile salvare l’appuntamento su Google Calendar. La prenotazione non è confermata. Riprova tra poco."},502,headers); }
+      const { data: confirmed, error: confirmError } = await db.from("appointments").update({ status: "confirmed", updated_at: new Date().toISOString() }).eq("id", inserted.id).eq("status", "pending").select("id,status,starts_at,ends_at").single();
+      if (confirmError || !confirmed) {
+        try { await syncGoogleCalendar({ action: "delete", bookingId: inserted.id }); } catch (cleanupError) { console.error("Calendar cleanup failed after database confirmation error", cleanupError); }
+        await db.from("appointments").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", inserted.id);
+        await notifyCalendar();
+        return json({error:"Non è stato possibile completare la conferma. La prenotazione non è confermata. Riprova tra poco."},502,headers);
+      }
+      await notifyCalendar();
+      return json({appointment:confirmed,message:"Prenotazione confermata.",calendar_sync:calendarSync},201,headers);
     }
     if (url.pathname.includes("/owner/") || path === "hours" || path === "blocks") {
       if (!owner(req)) return json({error:"Accesso titolare non configurato o non autorizzato."},401,headers);
