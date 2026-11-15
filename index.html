@@ -28,11 +28,11 @@
 .story-jar.real-photo-frame{width:clamp(220px,25vw,320px);height:440px;transform:rotateY(-12deg) rotateZ(3deg)}
 .product-gallery{background:radial-gradient(ellipse at 50% 42%,#fffdfa 0%,#f2dfda 62%,#e6c5c6 100%)}
 .product-photo{position:absolute;object-fit:contain;mix-blend-mode:multiply;filter:drop-shadow(12px 20px 18px #76505b2b)}
-.product-photo.kit-main{height:86%;width:72%;left:7%;top:7%;object-position:center}
+.product-photo.kit-main{height:100%;width:100%;left:0;top:0;object-fit:contain;object-position:center;mix-blend-mode:normal;filter:none}
 .product-photo.kit-detail{height:58%;width:43%;right:2%;bottom:3%;object-position:center;border:7px solid #fffaf7;border-radius:5px;box-shadow:0 14px 30px #76505b25;background:#fffaf7}
 .product-photo.lash-main{height:100%;width:100%;left:0;top:0;object-fit:cover;object-position:center;mix-blend-mode:normal;filter:none}
 .photo-caption{position:absolute;z-index:3;left:24px;bottom:20px;padding:8px 12px;background:#fffaf7dd;color:#895b66;font-size:8px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;backdrop-filter:blur(8px)}
-@media(max-width:800px){.product-jar.real-photo-frame{width:185px;height:310px}.story-jar.real-photo-frame{width:180px;height:300px}.product-photo.kit-main{width:76%;left:1%}.product-photo.kit-detail{width:45%;height:55%;right:0}.photo-caption{left:14px;bottom:14px;font-size:7px}}
+@media(max-width:800px){.product-jar.real-photo-frame{width:185px;height:310px}.story-jar.real-photo-frame{width:180px;height:300px}.product-photo.kit-main{width:100%;height:100%;left:0;top:0;object-fit:contain;object-position:center}.product-photo.kit-detail{width:45%;height:55%;right:0}.photo-caption{left:14px;bottom:14px;font-size:7px}}
 
 
 /* Minimal live calendar layout */
@@ -179,8 +179,8 @@ body{background:#f7f4ef;color:#292522}
 </section>
 <section class="products" id="prodotti"><div class="wrap"><h2>Listino prodotti</h2>
 <div class="shop-grid">
-<article class="shop-card"><div class="shop-visual product-gallery"><img class="product-photo kit-main" src="assets/products/IMG_9904.jpeg" alt="Valigetta kit"></div><div class="shop-info"><div><h3>Valigetta kit</h3></div><div class="price">15 €</div></div></article>
-<article class="shop-card"><div class="shop-visual product-gallery"><img class="product-photo lash-main" src="assets/products/creami_immagine_di_questo..._scritte_sulla_confezione.png" alt="Whipped Shampoo Lash Bath by Lola"></div><div class="shop-info"><div><h3>Whipped Shampoo</h3></div><div class="price">20 €</div></div></article>
+<article class="shop-card"><div class="shop-visual product-gallery"><img class="product-photo kit-main" src="assets/products/IMG_9904.jpeg" alt="Valigetta kit"></div><div class="shop-info"><div><h3>Valigetta kit</h3><p>60 ml</p></div><div class="price">15 €</div></div></article>
+<article class="shop-card"><div class="shop-visual product-gallery"><img class="product-photo lash-main" src="assets/products/creami_immagine_di_questo..._scritte_sulla_confezione.png" alt="Whipped Shampoo Lash Bath by Lola"></div><div class="shop-info"><div><h3>Whipped Shampoo</h3><p>100 ml</p></div><div class="price">20 €</div></div></article>
 </div></div></section>
 </main>
 
