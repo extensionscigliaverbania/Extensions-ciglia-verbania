@@ -58,8 +58,9 @@ function doPost(e) {
       throw new Error("Azione non riconosciuta. Usa upsert, delete o health.");
     }
 
-    const start = parseDate_(request.startsAt, "startsAt");
-    const end = parseDate_(request.endsAt, "endsAt");
+    // Accetta il formato ISO usato dal sito e, per compatibilità, i vecchi campi data/ora.
+    const start = parseDate_(request.startsAt || combineLocalDateTime_(request, false), "startsAt");
+    const end = parseDate_(request.endsAt || combineLocalDateTime_(request, true), "endsAt");
     if (start.getTime() >= end.getTime()) {
       throw new Error("L'orario di fine deve essere successivo all'inizio.");
     }
@@ -134,13 +135,23 @@ function validateBookingId_(value) {
   return id;
 }
 
+function combineLocalDateTime_(request, isEnd) {
+  const date = String(request.date || request.data || request.bookingDate || request.start_date || "").trim();
+  const time = String(isEnd
+    ? (request.endTime || request.end_time || "")
+    : (request.time || request.ora || request.orario || request.startTime || request.start_time || "")).trim();
+  if (!date || !time) return "";
+  // Il fuso orario del progetto Apps Script deve essere Europe/Rome.
+  return date + "T" + time + ":00";
+}
+
 function parseDate_(value, fieldName) {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error("Data o orario mancanti (" + fieldName + ").");
+    throw new Error("Data o orario mancanti (" + fieldName + "). Il sito deve inviare startsAt/endsAt in formato ISO.");
   }
   const date = new Date(value);
   if (isNaN(date.getTime())) {
-    throw new Error("Data o orario non validi (" + fieldName + ").");
+    throw new Error("Data o orario non validi (" + fieldName + "): " + value);
   }
   return date;
 }
