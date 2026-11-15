@@ -21,7 +21,8 @@ const CONFIG = Object.freeze({
   PROPERTY_PREFIX: "EXTENSIONS_EVENT_",
   MAX_TITLE_LENGTH: 250,
   MAX_DESCRIPTION_LENGTH: 8000,
-  LOCK_TIMEOUT_MS: 20000
+  LOCK_TIMEOUT_MS: 20000,
+  NOTIFICATION_EMAIL: "iamlolamanagement@gmail.com"
 });
 
 function doPost(e) {
@@ -72,6 +73,11 @@ function doPost(e) {
     let event;
     try {
       event = upsertBookingEvent_(calendar, properties, bookingId, title, description, start, end);
+      try {
+        sendBookingNotification_(properties, bookingId, title, description, start, end);
+      } catch (notificationError) {
+        console.error("Email notification failed (booking remains saved): " + notificationError);
+      }
     } finally {
       lock.releaseLock();
     }
@@ -191,6 +197,33 @@ function upsertBookingEvent_(calendar, properties, bookingId, title, description
 
   properties.setProperty(propertyKey, event.getId());
   return event;
+}
+
+function sendBookingNotification_(properties, bookingId, title, description, start, end) {
+  const marker = "EXTENSIONS_EMAIL_NOTIFIED_" + bookingId;
+  if (properties.getProperty(marker)) return;
+
+  const startText = Utilities.formatDate(start, CONFIG.TIME_ZONE, "dd/MM/yyyy HH:mm");
+  const endText = Utilities.formatDate(end, CONFIG.TIME_ZONE, "HH:mm");
+  const subject = "Nuova prenotazione confermata - " + title;
+  const body = [
+    "È stata confermata una nuova prenotazione dal sito Extensions Ciglia Verbania.",
+    "",
+    "Appuntamento: " + startText + " - " + endText,
+    "Dettagli:",
+    description,
+    "",
+    "L'appuntamento è stato salvato su Google Calendar."
+  ].join("\n");
+
+  MailApp.sendEmail({ to: CONFIG.NOTIFICATION_EMAIL, subject: subject, body: body });
+  properties.setProperty(marker, new Date().toISOString());
+}
+
+// Esegui questa funzione una sola volta dall'editor per autorizzare l'invio delle email.
+function authorizeEmailNotifications_() {
+  MailApp.getRemainingDailyQuota();
+  Logger.log("Autorizzazione email pronta.");
 }
 
 function deleteBookingEvent_(calendar, properties, bookingId) {
