@@ -35,10 +35,19 @@ async function syncGoogleCalendar(payload: Record<string, unknown>) {
   const scriptUrl = Deno.env.get("GOOGLE_APPS_SCRIPT_URL") ?? "";
   const scriptToken = Deno.env.get("GOOGLE_APPS_SCRIPT_TOKEN") ?? "";
   if (!scriptUrl || !scriptToken) return { ok: false, configured: false };
+  const bridgePayload = { ...payload };
+  if (payload.action === "upsert" && typeof payload.startsAt === "string" && typeof payload.endsAt === "string") {
+    const localStart = toZonedTime(new Date(payload.startsAt), TZ);
+    const localEnd = toZonedTime(new Date(payload.endsAt), TZ);
+    const date = localStart.getFullYear() + "-" + String(localStart.getMonth() + 1).padStart(2, "0") + "-" + String(localStart.getDate()).padStart(2, "0");
+    const time = String(localStart.getHours()).padStart(2, "0") + ":" + String(localStart.getMinutes()).padStart(2, "0");
+    const endTime = String(localEnd.getHours()).padStart(2, "0") + ":" + String(localEnd.getMinutes()).padStart(2, "0");
+    Object.assign(bridgePayload, { date, time, startTime: time, endTime, start_date: date, start_time: time });
+  }
   const response = await fetch(scriptUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...payload, token: scriptToken }),
+    body: JSON.stringify({ ...bridgePayload, token: scriptToken }),
     redirect: "follow",
   });
   const raw = await response.text();
@@ -115,7 +124,7 @@ Deno.serve(async (req: Request) => {
       const { data: inserted, error } = await db.from("appointments").insert({
         service_id:serviceId,customer_name:name,customer_instagram:instagram,
         customer_notes:String(body.notes ?? "").slice(0,1000),
-        starts_at:chosen.starts_at,ends_at:chosen.ends_at,status:"pending",source:"website"
+        starts_at:chosen.starts_at,ends_at:chosen.ends_at,status:"confirmed",source:"website"
       }).select("id,status,starts_at,ends_at").single();
       if (error) return json({error:error.code==="23P01"?"Questo orario è appena stato prenotato. Scegline un altro.":"Impossibile salvare la richiesta."},409,headers);
       let calendarSync: { ok: boolean; configured?: boolean; error?: string } = { ok: false, configured: false };
@@ -133,7 +142,7 @@ Deno.serve(async (req: Request) => {
           bookingId: inserted.id,
           startsAt: chosen.starts_at,
           endsAt: chosen.ends_at,
-          title: `IN ATTESA · ${name} · ${data.service.name}`,
+          title: `CONFERMATO · ${name} · ${data.service.name}`,
           description,
         });
         calendarSync = { ok: synced.ok, configured: true };
@@ -142,7 +151,8 @@ Deno.serve(async (req: Request) => {
         console.error("Google Calendar create sync failed", e);
       }
       await notifyCalendar();
-      return json({appointment:inserted,message:"Richiesta ricevuta, in attesa di conferma.",calendar_sync:calendarSync},201,headers);
+      if (!calendarSync.ok) { await db.from("appointments").update({ status: "pending", updated_at: new Date().toISOString() }).eq("id", inserted.id); return json({error:"Non è stato possibile confermare l’appuntamento sul calendario. Riprova tra poco."},502,headers); }
+      return json({appointment:inserted,message:"Prenotazione confermata.",calendar_sync:calendarSync},201,headers);
     }
     if (url.pathname.includes("/owner/") || path === "hours" || path === "blocks") {
       if (!owner(req)) return json({error:"Accesso titolare non configurato o non autorizzato."},401,headers);
