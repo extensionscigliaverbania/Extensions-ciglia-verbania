@@ -6,7 +6,7 @@ Sito statico autonomo copiato dal progetto `custom-pages/extensions-ciglia-verba
 
 Il repository usa GitHub Actions per pubblicare la cartella principale su GitHub Pages. Ogni push su `main` avvia il workflow `.github/workflows/deploy-pages.yml`.
 
-URL previsto: https://lolabigmama.github.io/Extensions-ciglia-verbania/
+URL previsto: https://extensionscigliaverbania.github.io/Extensions-ciglia-verbania/
 
 ## Modalità demo
 
