@@ -42,7 +42,7 @@ async function syncGoogleCalendar(payload: Record<string, unknown>) {
     const date = localStart.getFullYear() + "-" + String(localStart.getMonth() + 1).padStart(2, "0") + "-" + String(localStart.getDate()).padStart(2, "0");
     const time = String(localStart.getHours()).padStart(2, "0") + ":" + String(localStart.getMinutes()).padStart(2, "0");
     const endTime = String(localEnd.getHours()).padStart(2, "0") + ":" + String(localEnd.getMinutes()).padStart(2, "0");
-    Object.assign(bridgePayload, { date, time, startTime: time, endTime, start_date: date, start_time: time });
+    Object.assign(bridgePayload, { date, time, data: date, ora: time, orario: time, bookingDate: date, startTime: time, endTime, start_date: date, start_time: time });
   }
   const response = await fetch(scriptUrl, {
     method: "POST",
