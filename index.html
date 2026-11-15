@@ -146,7 +146,7 @@ body{background:#f7f4ef;color:#292522}
 .confirmation-message{font-size:14px;line-height:1.9;color:#6f5d60;margin:0 auto 25px;white-space:pre-line}
 .confirmation-heart{font-size:25px;margin-bottom:18px}
 .confirmation-close{width:100%;min-height:48px;padding:12px 18px;border:1px solid #302a25;background:#302a25;color:#fff;font:700 9px var(--sans);letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
-.confirmation-close:hover{background:#80634f}
+.confirmation-close:hover{background:#80634f}.error-dialog .confirmation-heart{width:42px;height:42px;margin:0 auto 18px;border:1px solid #a35f5f;border-radius:50%;display:grid;place-items:center;color:#a35f5f;font:400 22px var(--sans)}
 
 </style>
 </head>
@@ -214,9 +214,21 @@ body{background:#f7f4ef;color:#292522}
   <div class="confirmation-heart" aria-hidden="true">♡</div>
   <div class="confirmation-kicker">Extensions Ciglia Verbania</div>
   <h2 class="confirmation-heading" id="confirmation-title">Grazie per la prenotazione!</h2>
-  <p class="confirmation-message">Il tuo appuntamento è stato confermato. Ti aspetto in Via Repubblica 7/8 a Trobaso🏡
-Scrivimi sulla pagina @extensionscigliaverbania quando ci sei 🩷</p>
+  <p class="confirmation-message">La tua prenotazione è stata confermata. Ci vediamo in Via Repubblica 7/8 🏡 Trobaso, quando ci sei scrivimi che ti apro 🩷
+
+Per disdire scrivi su Instagram a @extensionscigliaverbania</p>
   <button class="confirmation-close" id="confirmation-close" type="button">Ho capito</button>
+ </div>
+</dialog>
+
+
+<dialog class="confirmation-dialog error-dialog" id="booking-error-dialog" aria-labelledby="booking-error-title">
+ <div class="confirmation-inner">
+  <div class="confirmation-heart" aria-hidden="true">!</div>
+  <div class="confirmation-kicker">Extensions Ciglia Verbania</div>
+  <h2 class="confirmation-heading" id="booking-error-title">Prenotazione non confermata</h2>
+  <p class="confirmation-message" id="booking-error-message">Non è stato possibile salvare l’appuntamento su Google Calendar. Non è stata registrata alcuna conferma. Riprova tra poco.</p>
+  <button class="confirmation-close" id="booking-error-close" type="button">Torna alla prenotazione</button>
  </div>
 </dialog>
 
@@ -232,6 +244,9 @@ Scrivimi sulla pagina @extensionscigliaverbania quando ci sei 🩷</p>
  const times=$("time-list"), submit=$("booking-submit"), status=$("booking-status"), form=$("booking-form");
  const rulesDialog=$("rules-dialog"), rulesCheckbox=$("rules-checkbox"), rulesConfirm=$("rules-confirm"), rulesCancel=$("rules-cancel");
  const confirmationDialog=$("confirmation-dialog");
+ const errorDialog=$("booking-error-dialog");
+ $("booking-error-close").addEventListener("click",()=>errorDialog.close());
+ errorDialog.addEventListener("click",e=>{if(e.target===errorDialog)errorDialog.close();});
  $("confirmation-close").addEventListener("click",()=>confirmationDialog.close());
  confirmationDialog.addEventListener("click",e=>{if(e.target===confirmationDialog)confirmationDialog.close();});
  let rulesAccepted=false;
@@ -288,12 +303,12 @@ Scrivimi sulla pagina @extensionscigliaverbania quando ci sei 🩷</p>
  rulesConfirm.addEventListener("click",()=>{if(!rulesCheckbox.checked)return;rulesAccepted=true;rulesDialog.close();form.requestSubmit();});
  rulesDialog.addEventListener("click",e=>{if(e.target===rulesDialog){rulesDialog.close();rulesCheckbox.checked=false;}});
  form.addEventListener("submit",async e=>{
-  e.preventDefault();if(!service.value){status.textContent="Seleziona il trattamento per completare la prenotazione.";return;}if(!selectedSlot)return;if(!rulesAccepted){rulesCheckbox.checked=false;rulesConfirm.disabled=true;rulesDialog.showModal();return;}submit.disabled=true;status.textContent="Invio richiesta…";
+  e.preventDefault();if(!service.value){status.textContent="Seleziona il trattamento per completare la prenotazione.";return;}if(!selectedSlot)return;if(!rulesAccepted){rulesCheckbox.checked=false;rulesConfirm.disabled=true;rulesDialog.showModal();return;}submit.disabled=true;status.textContent="Sto salvando la prenotazione nel calendario…";
   try{const payload={service_id:service.value,starts_at:selectedSlot.starts_at,customer_name:form.elements.customer_name.value.trim(),customer_instagram:form.elements.customer_instagram.value.trim(),notes:form.elements.notes.value.trim()};
    const r=await fetch(api+"/public/appointments",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
    const data=await r.json();if(!r.ok)throw Error(data.error||"Prenotazione non riuscita");
    status.textContent="";form.reset();await loadSlots();confirmationDialog.showModal();
-  }catch(err){status.textContent=err.message;submit.disabled=!selectedSlot;}
+  }catch(err){status.textContent="";$("booking-error-message").textContent=(err.message||"Non è stato possibile salvare l’appuntamento su Google Calendar.")+" La prenotazione non è confermata. Riprova tra poco.";errorDialog.showModal();submit.disabled=!selectedSlot;}
  });
  renderMonth();loadServices();
  if(client){client.channel("calendar").on("broadcast",{event:"calendar_changed"},()=>{if(selectedDate)loadSlots();}).subscribe();}
