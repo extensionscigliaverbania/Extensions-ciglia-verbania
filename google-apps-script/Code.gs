@@ -203,17 +203,24 @@ function sendBookingNotification_(properties, bookingId, title, description, sta
   const marker = "EXTENSIONS_EMAIL_NOTIFIED_" + bookingId;
   if (properties.getProperty(marker)) return;
 
-  const startText = Utilities.formatDate(start, CONFIG.TIME_ZONE, "dd/MM/yyyy HH:mm");
+  // Nell'email mostriamo solo i dati utili, senza ID o dettagli tecnici.
+  const cleanDescription = String(description || "").replace(/\\\\n/g, "\n");
+  const lines = cleanDescription.split(/\r?\n/);
+  const customerLine = lines.find(function (line) { return /^Cliente:\\s*/i.test(line); }) || "";
+  const instagramLine = lines.find(function (line) { return /^Instagram:\\s*/i.test(line); }) || "";
+  const customerName = customerLine.replace(/^Cliente:\\s*/i, "").trim();
+  const instagram = instagramLine.replace(/^Instagram:\\s*/i, "").trim();
+
+  const dateText = Utilities.formatDate(start, CONFIG.TIME_ZONE, "dd/MM/yyyy");
+  const startText = Utilities.formatDate(start, CONFIG.TIME_ZONE, "HH:mm");
   const endText = Utilities.formatDate(end, CONFIG.TIME_ZONE, "HH:mm");
-  const subject = "Nuova prenotazione confermata - " + title;
+  const subject = "Nuova prenotazione confermata";
   const body = [
-    "È stata confermata una nuova prenotazione dal sito Extensions Ciglia Verbania.",
+    "Nuova prenotazione confermata",
     "",
-    "Appuntamento: " + startText + " - " + endText,
-    "Dettagli:",
-    description,
-    "",
-    "L'appuntamento è stato salvato su Google Calendar."
+    "Nome e cognome: " + (customerName || "Non indicato"),
+    "Nickname Instagram: " + (instagram || "Non indicato"),
+    "Orario: " + dateText + " dalle " + startText + " alle " + endText
   ].join("\n");
 
   MailApp.sendEmail({ to: CONFIG.NOTIFICATION_EMAIL, subject: subject, body: body });
