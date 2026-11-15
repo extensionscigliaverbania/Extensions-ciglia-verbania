@@ -204,12 +204,12 @@ function sendBookingNotification_(properties, bookingId, title, description, sta
   if (properties.getProperty(marker)) return;
 
   // Nell'email mostriamo solo i dati utili, senza ID o dettagli tecnici.
-  const cleanDescription = String(description || "").replace(/\\\\n/g, "\n");
-  const lines = cleanDescription.split(/\r?\n/);
-  const customerLine = lines.find(function (line) { return /^Cliente:\\s*/i.test(line); }) || "";
-  const instagramLine = lines.find(function (line) { return /^Instagram:\\s*/i.test(line); }) || "";
-  const customerName = customerLine.replace(/^Cliente:\\s*/i, "").trim();
-  const instagram = instagramLine.replace(/^Instagram:\\s*/i, "").trim();
+  const cleanDescription = String(description || "").split(String.fromCharCode(92) + "n").join("\n");
+  const lines = cleanDescription.split("\n");
+  const customerLine = lines.find(function (line) { return line.indexOf("Cliente:") === 0; }) || "";
+  const instagramLine = lines.find(function (line) { return line.indexOf("Instagram:") === 0; }) || "";
+  const customerName = customerLine.substring("Cliente:".length).trim();
+  const instagram = instagramLine.substring("Instagram:".length).trim();
 
   const dateText = Utilities.formatDate(start, CONFIG.TIME_ZONE, "dd/MM/yyyy");
   const startText = Utilities.formatDate(start, CONFIG.TIME_ZONE, "HH:mm");
@@ -226,7 +226,6 @@ function sendBookingNotification_(properties, bookingId, title, description, sta
   MailApp.sendEmail({ to: CONFIG.NOTIFICATION_EMAIL, subject: subject, body: body });
   properties.setProperty(marker, new Date().toISOString());
 }
-
 // Esegui questa funzione una sola volta dall'editor per autorizzare l'invio delle email.
 function authorizeEmailNotifications_() {
   MailApp.getRemainingDailyQuota();
