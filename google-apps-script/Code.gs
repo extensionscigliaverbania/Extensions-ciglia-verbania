@@ -1,95 +1,234 @@
 /**
- * Google Apps Script bridge for Extensions Ciglia Verbania.
+ * Extensions Ciglia Verbania - Google Calendar bridge
  *
- * Deploy as a Web App executing as the script owner.
- * Store GOOGLE_BRIDGE_TOKEN and GOOGLE_CALENDAR_ID in Script Properties.
+ * Pubblicazione: Web App, esegui come proprietario, accesso "Chiunque".
+ * Proprietà script richieste:
+ *   GOOGLE_BRIDGE_TOKEN = stesso token configurato in Supabase
+ *   GOOGLE_CALENDAR_ID = ID del calendario di destinazione
+ *
+ * API POST JSON:
+ *   { token, action:"upsert", bookingId, startsAt, endsAt, title, description }
+ *   { token, action:"delete", bookingId }
+ *   { token, action:"health" }
+ *
+ * upsert è idempotente: ripetere la stessa richiesta aggiorna l'evento
+ * esistente invece di crearne uno duplicato.
  */
-const TZ = "Europe/Rome";
-const BOOKING_ID_PREFIX = "EXTENSIONS_BOOKING_ID=";
+
+const CONFIG = Object.freeze({
+  TIME_ZONE: "Europe/Rome",
+  EVENT_ID_PREFIX: "EXTENSIONS_BOOKING_ID=",
+  PROPERTY_PREFIX: "EXTENSIONS_EVENT_",
+  MAX_TITLE_LENGTH: 250,
+  MAX_DESCRIPTION_LENGTH: 8000,
+  LOCK_TIMEOUT_MS: 20000
+});
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
-    const props = PropertiesService.getScriptProperties();
-    const expectedToken = props.getProperty("GOOGLE_BRIDGE_TOKEN") || "";
-    const calendarId = props.getProperty("GOOGLE_CALENDAR_ID") || "";
-    const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    const request = parseRequest_(e);
+    const properties = PropertiesService.getScriptProperties();
+    authorize_(request.token, properties);
 
-    if (!expectedToken || !calendarId || !body.token ||
-        !constantTimeEquals_(String(body.token), expectedToken)) {
-      return json_({ ok: false, error: "Unauthorized or bridge not configured." });
+    const action = String(request.action || "").toLowerCase();
+    if (action === "health") {
+      return json_({
+        ok: true,
+        service: "extensions-ciglia-calendar-bridge",
+        timeZone: CONFIG.TIME_ZONE,
+        calendarConfigured: Boolean(properties.getProperty("GOOGLE_CALENDAR_ID"))
+      });
     }
 
-    const action = String(body.action || "");
-    const bookingId = String(body.bookingId || "");
-    if (!bookingId || !/^[0-9a-f-]{36}$/i.test(bookingId)) {
-      return json_({ ok: false, error: "Invalid bookingId." });
-    }
-
-    const calendar = CalendarApp.getCalendarById(calendarId);
-    if (!calendar) return json_({ ok: false, error: "Target calendar not found." });
-
-    const propsKey = "booking_" + bookingId;
-    const eventId = props.getProperty(propsKey);
+    const bookingId = validateBookingId_(request.bookingId);
+    const calendar = getCalendar_(properties);
 
     if (action === "delete") {
-      if (eventId) {
-        const existing = calendar.getEventById(eventId);
-        if (existing) existing.deleteEvent();
-        props.deleteProperty(propsKey);
+      lock.waitLock(CONFIG.LOCK_TIMEOUT_MS);
+      try {
+        deleteBookingEvent_(calendar, properties, bookingId);
+      } finally {
+        lock.releaseLock();
       }
       return json_({ ok: true, action: "delete", bookingId: bookingId });
     }
 
     if (action !== "upsert") {
-      return json_({ ok: false, error: "Unsupported action." });
+      throw new Error("Azione non riconosciuta. Usa upsert, delete o health.");
     }
 
-    const start = new Date(String(body.startsAt || ""));
-    const end = new Date(String(body.endsAt || ""));
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
-      return json_({ ok: false, error: "Invalid event date/time." });
+    const start = parseDate_(request.startsAt, "startsAt");
+    const end = parseDate_(request.endsAt, "endsAt");
+    if (start.getTime() >= end.getTime()) {
+      throw new Error("L'orario di fine deve essere successivo all'inizio.");
     }
 
-    const title = String(body.title || "Prenotazione Extensions Ciglia").slice(0, 250);
-    const description = String(body.description || "").slice(0, 8000) +
-      "\n\n" + BOOKING_ID_PREFIX + bookingId;
+    const title = cleanText_(request.title || "Prenotazione Extensions Ciglia", CONFIG.MAX_TITLE_LENGTH);
+    const description = buildDescription_(request.description, bookingId);
 
-    let event = eventId ? calendar.getEventById(eventId) : null;
-    if (event) {
-      event.setTitle(title);
-      event.setTime(start, end);
-      event.setDescription(description);
-    } else {
-      // Recover safely if the script property was lost after a successful create.
-      const matches = calendar.getEvents(
-        new Date(start.getTime() - 86400000),
-        new Date(end.getTime() + 86400000)
-      ).filter(function (candidate) {
-        return (candidate.getDescription() || "").indexOf(BOOKING_ID_PREFIX + bookingId) !== -1;
-      });
-      if (matches.length) {
-        event = matches[0];
-        event.setTitle(title);
-        event.setTime(start, end);
-        event.setDescription(description);
-        // Remove any accidental duplicates for the same booking id.
-        matches.slice(1).forEach(function (duplicate) { duplicate.deleteEvent(); });
-      } else {
-        event = calendar.createEvent(title, start, end, { description: description });
-      }
+    lock.waitLock(CONFIG.LOCK_TIMEOUT_MS);
+    let event;
+    try {
+      event = upsertBookingEvent_(calendar, properties, bookingId, title, description, start, end);
+    } finally {
+      lock.releaseLock();
     }
 
-    props.setProperty(propsKey, event.getId());
-    return json_({ ok: true, action: "upsert", bookingId: bookingId, eventId: event.getId() });
-  } catch (err) {
-    return json_({ ok: false, error: String(err && err.message ? err.message : err) });
+    return json_({
+      ok: true,
+      action: "upsert",
+      bookingId: bookingId,
+      eventId: event.getId(),
+      title: event.getTitle(),
+      startsAt: event.getStartTime().toISOString(),
+      endsAt: event.getEndTime().toISOString(),
+      timeZone: CONFIG.TIME_ZONE
+    });
+  } catch (error) {
+    console.error("Calendar bridge error: " + (error && error.stack ? error.stack : error));
+    return json_({
+      ok: false,
+      error: String(error && error.message ? error.message : error)
+    });
   }
+}
+
+function parseRequest_(e) {
+  if (!e || !e.postData || !e.postData.contents) {
+    throw new Error("Richiesta vuota: invia un JSON tramite POST.");
+  }
+  let body;
+  try {
+    body = JSON.parse(e.postData.contents);
+  } catch (_) {
+    throw new Error("Il contenuto ricevuto non è un JSON valido.");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Formato della richiesta non valido.");
+  }
+  return body;
+}
+
+function authorize_(providedToken, properties) {
+  const expectedToken = properties.getProperty("GOOGLE_BRIDGE_TOKEN") || "";
+  const supplied = String(providedToken || "");
+  if (!expectedToken || !constantTimeEquals_(supplied, expectedToken)) {
+    throw new Error("Accesso non autorizzato o token non configurato.");
+  }
+}
+
+function getCalendar_(properties) {
+  const calendarId = properties.getProperty("GOOGLE_CALENDAR_ID") || "";
+  if (!calendarId) throw new Error("GOOGLE_CALENDAR_ID non è configurato.");
+  const calendar = CalendarApp.getCalendarById(calendarId);
+  if (!calendar) throw new Error("Calendario Google non trovato o non accessibile.");
+  return calendar;
+}
+
+function validateBookingId_(value) {
+  const id = String(value || "").trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error("ID prenotazione non valido.");
+  }
+  return id;
+}
+
+function parseDate_(value, fieldName) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Data o orario mancanti (" + fieldName + ").");
+  }
+  const date = new Date(value);
+  if (isNaN(date.getTime())) {
+    throw new Error("Data o orario non validi (" + fieldName + ").");
+  }
+  return date;
+}
+
+function upsertBookingEvent_(calendar, properties, bookingId, title, description, start, end) {
+  const propertyKey = CONFIG.PROPERTY_PREFIX + bookingId;
+  const savedEventId = properties.getProperty(propertyKey);
+  let event = savedEventId ? calendar.getEventById(savedEventId) : null;
+
+  // Se le proprietà sono state perse, cerca l'ID univoco nella descrizione.
+  if (!event) {
+    const candidates = calendar.getEvents(
+      new Date(start.getTime() - 2 * 86400000),
+      new Date(end.getTime() + 2 * 86400000)
+    ).filter(function (candidate) {
+      return (candidate.getDescription() || "").indexOf(CONFIG.EVENT_ID_PREFIX + bookingId) !== -1;
+    });
+    if (candidates.length) {
+      event = candidates[0];
+      candidates.slice(1).forEach(function (duplicate) {
+        duplicate.deleteEvent();
+      });
+    }
+  }
+
+  if (event) {
+    event.setTitle(title);
+    event.setTime(start, end);
+    event.setDescription(description);
+  } else {
+    event = calendar.createEvent(title, start, end, {
+      description: description,
+      guests: "",
+      sendInvites: false
+    });
+  }
+
+  properties.setProperty(propertyKey, event.getId());
+  return event;
+}
+
+function deleteBookingEvent_(calendar, properties, bookingId) {
+  const propertyKey = CONFIG.PROPERTY_PREFIX + bookingId;
+  const savedEventId = properties.getProperty(propertyKey);
+  let deleted = false;
+
+  if (savedEventId) {
+    const event = calendar.getEventById(savedEventId);
+    if (event) {
+      event.deleteEvent();
+      deleted = true;
+    }
+    properties.deleteProperty(propertyKey);
+  }
+
+  // Fallback per recuperare l'evento anche se la proprietà non esiste più.
+  if (!deleted) {
+    const now = new Date();
+    const candidates = calendar.getEvents(
+      new Date(now.getTime() - 365 * 86400000),
+      new Date(now.getTime() + 730 * 86400000)
+    ).filter(function (candidate) {
+      return (candidate.getDescription() || "").indexOf(CONFIG.EVENT_ID_PREFIX + bookingId) !== -1;
+    });
+    candidates.forEach(function (candidate) {
+      candidate.deleteEvent();
+    });
+  }
+}
+
+function buildDescription_(description, bookingId) {
+  const text = cleanText_(description || "", CONFIG.MAX_DESCRIPTION_LENGTH);
+  const marker = CONFIG.EVENT_ID_PREFIX + bookingId;
+  return text.indexOf(marker) >= 0 ? text : (text ? text + "\n\n" : "") + marker;
+}
+
+function cleanText_(value, maxLength) {
+  return String(value == null ? "" : value)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .slice(0, maxLength);
 }
 
 function constantTimeEquals_(a, b) {
   if (a.length !== b.length) return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
   return diff === 0;
 }
 
