@@ -166,7 +166,7 @@ body{background:#f7f4ef;color:#292522}
 <div class="booking-panel">
 <h2>Prenota un appuntamento</h2>
 <div class="field"><label>Orari disponibili</label><div class="time-list" id="time-list"><span class="calendar-help">Seleziona un giorno</span></div></div>
-<div class="field"><label for="service">Scegli il trattamento</label><select id="service" required><option value="">Seleziona il trattamento</option><option value="cbe07ae7-7d3d-4171-96db-b841f504bb92">Extensions ciglia one to one · 50 € · 2 ore</option><option value="4dd3cf57-81db-42ed-9c54-9467b6133032">Extensions ciglia volume · 70 € · 2 ore</option><option value="bb810b5c-640f-4aa4-a21d-b296cc6fd1a5">Refill one to one · 40 € · 2 ore</option><option value="f5a6f27b-d5cb-4a8b-b7bf-5e3505979daa">Refill volume · 60 € · 2 ore</option></select></div>
+<div class="field"><label for="service">Scegli il trattamento</label><select id="service" required><option value="">Seleziona il trattamento</option><option value="cbe07ae7-7d3d-4171-96db-b841f504bb92">Extensions ciglia one to one · 2 ore</option><option value="4dd3cf57-81db-42ed-9c54-9467b6133032">Extensions ciglia volume · 2 ore</option><option value="bb810b5c-640f-4aa4-a21d-b296cc6fd1a5">Refill one to one · 2 ore</option><option value="f5a6f27b-d5cb-4a8b-b7bf-5e3505979daa">Refill volume · 2 ore</option></select></div>
 <form id="booking-form">
 <div class="field"><label for="customer-name">Nome e cognome</label><input id="customer-name" name="customer_name" autocomplete="name" required placeholder="Nome e cognome"></div>
 <div class="field"><label for="customer-instagram">Nickname Instagram</label><input id="customer-instagram" name="customer_instagram" type="text" autocomplete="off" required maxlength="40" placeholder="@nickname"></div>
@@ -280,7 +280,7 @@ Per disdire scrivere su Instagram a @extensionscigliaverbania entro e non oltre 
    if(services.length){
     const current=service.value;
     service.innerHTML='<option value="">Seleziona il trattamento</option>';
-    services.forEach(s=>{const o=document.createElement("option");o.value=s.id;o.textContent=s.name+" · "+(s.price_cents/100).toLocaleString("it-IT",{style:"currency",currency:"EUR"})+" · "+(s.duration_minutes/60)+" ore";service.append(o);});
+    services.forEach(s=>{const o=document.createElement("option");o.value=s.id;o.textContent=s.name+" · "+(s.duration_minutes/60)+" ore";service.append(o);});
     if(services.some(s=>s.id===current))service.value=current;
    }
   }catch(e){help.textContent="Non riesco ad aggiornare il listino in questo momento. Puoi comunque selezionare il trattamento; gli orari verranno caricati appena il calendario risponde.";}
